@@ -1,10 +1,32 @@
-# GraphRAG: 基于知识图谱的检索增强生成系统
+# GraphRAG: 基于知识图谱的医学知识智能检索与问答系统
 
-基于 GraphRAG (Graph-based Retrieval Augmented Generation) 技术的智能医疗知识问答系统，将知识图谱的精确检索能力、向量语义搜索与生成式 AI 的语义理解能力相结合，为用户提供准确、及时的医疗咨询服务。
+使用 VS Code + Claude Code 进行医学知识图谱问答系统的前后端 vibe coding 开发，提供聊天主界面，支持多种主流 API 模型的切换。
+
+针对传统医疗 RAG 在复杂疾病关联推理、跨实体语义检索及临床知识碎片化等问题，引入 Neo4j 与 ChromaDB 构建 GraphRAG 医学知识问答系统。将知识图谱的精确检索能力与生成式 AI 的语义理解能力相结合，为用户提供准确、及时的医疗咨询服务。
 
 ## 效果图
 
 ![问答系统效果图](img/qa_show.png)
+
+## 技术实现
+
+### 1. 医学知识图谱构建与结构化检索
+- 基于 LLM 提取 200+ 份医学文档、权威网站数据及疾病拓扑中的实体与关系并存入 Neo4j
+- 结合 ChromaDB 向量检索构建多路召回架构
+- 采用 LLM 别名对齐与实体抽取解决口语化表达与结构化数据的异构对齐问题，消除手工维护领域词典的扩展瓶颈
+
+### 2. 基于查询分析的动态路由
+- 利用实体链接与意图分类器分析查询复杂度
+- 基础概念与模糊查询分流至向量检索
+- 跨实体复杂关联分发至图引擎
+- 未命中时由 LLM 自生成 Cypher 兜底
+- 显著降低 API 调用成本与响应延迟
+
+### 3. 多跳图推理与查询改写
+- 基于图数据库实现跨疾病发现、药物关联追溯等三类多跳推理模式
+- 将隐含关联显式注入上下文
+- 结合 LangChain 实现 LLM 查询改写机制
+- 自动进行多轮对话中的指代消解，减少传统 RAG 在多轮交互中因上下文断裂导致的检索漂移
 
 ## 系统架构
 
@@ -127,6 +149,7 @@ GraphRAG/
 ├── entity_indexer.py         # 实体向量索引构建（Neo4j → ChromaDB）
 ├── answer_search.py          # Neo4j Cypher 查询与答案组装
 ├── question_parser.py        # 问题解析与分类
+├── dict/                    # 医疗领域词典
 ├── chroma_db/               # ChromaDB 向量数据库文件
 ├── requirements.txt         # Python 依赖
 └── README.md               # 项目文档
@@ -177,19 +200,8 @@ GraphRAG/
 - [ ] 实现知识图谱可视化
 - [ ] 添加用户反馈机制
 
-## 贡献指南
-
-1. Fork 项目
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
-
 ## 许可证
 
 本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
 
-## 联系方式
-
-- 项目维护者：[Jinyu]
-- GitHub：[https://github.com/erectsrhapsodesxx-max]
+Copyright (c) 2026 Jinyu

@@ -12,69 +12,73 @@
 
 ### 1. 医学知识图谱构建与结构化检索
 - 基于 LLM 提取 200+ 份医学文档、权威网站数据及疾病拓扑中的实体与关系并存入 Neo4j
-- 结合 ChromaDB 向量检索构建多路召回架构
+- 结合 ChromaDB + text2vec-base-chinese 中文语义向量模型构建多路召回架构
 - 采用 LLM 别名对齐与实体抽取解决口语化表达与结构化数据的异构对齐问题，消除手工维护领域词典的扩展瓶颈
 
 ### 2. 基于查询分析的动态路由
 - 利用实体链接与意图分类器分析查询复杂度
-- 基础概念与模糊查询分流至向量检索
-- 跨实体复杂关联分发至图引擎
-- 未命中时由 LLM 自生成 Cypher 兜底
+- 基础概念与模糊查询分流至 ChromaDB 向量检索
+- 涉及跨实体复杂关联的逻辑分发至 Neo4j 图引擎
+- 检索结果不足时由 LLM 自生成 Cypher 兜底
 - 显著降低 API 调用成本与响应延迟
 
 ### 3. 多跳图推理与查询改写
-- 基于图数据库实现跨疾病发现、药物关联追溯等三类多跳推理模式
+- 基于 Neo4j 图数据库实现三类多跳推理模式：共享症状跨疾病发现、药品-药厂追溯链、并发症-用药链
 - 将隐含关联显式注入上下文
-- 结合 LangChain 实现 LLM 查询改写机制
-- 自动进行多轮对话中的指代消解，减少传统 RAG 在多轮交互中因上下文断裂导致的检索漂移
+- 结合 LangChain 实现 LLM 查询改写机制，自动进行多轮对话中的指代消解
+- 减少传统 RAG 在多轮交互中因上下文断裂导致的检索漂移
 
 ## 系统架构
 
-### GraphRAG 技术架构
-- **知识图谱检索层**：基于 Neo4j 的高效图数据库检索，精确匹配实体与关系
-- **向量语义检索层**：基于 ChromaDB 的实体向量索引，支持问题与实体的语义匹配
-- **语义理解层**：DeepSeek API 的深度语义理解与生成
-- **知识融合层**：图检索结果 + 向量检索结果 + 生成模型的智能融合
-- **流式响应层**：实时流式生成与展示
+### 检索流程
+```
+用户问题 → LLM查询改写 → 动态路由分析 → 精确Cypher / 向量语义 / 图关系查询
+                                         ↘ NL→Cypher兜底（低命中时）
+                                         → 多跳推理 → 上下文融合 → DeepSeek流式生成
+```
+
+### 核心引擎
+| 引擎 | 技术 | 作用 |
+|------|------|------|
+| 意图精确检索 | Neo4j + QuestionParser | 意图→Cypher，精确查症状/药品/病因等 |
+| 向量语义检索 | ChromaDB + text2vec | 语义匹配实体，处理口语化表达 |
+| 多跳图推理 | Neo4j 2-hop/3-hop | 发现跨实体隐含关联 |
+| NL→Cypher 兜底 | LangChain + DeepSeek | 检索不足时 LLM 自生成图查询 |
 
 ### 知识图谱规模
 - 4.4 万医疗实体节点
 - 30 万实体关系边
-- 支持多种实体类型：疾病、症状、药品、检查项目等
-- 支持多种关系类型：症状、病因、治疗、检查等
-
-## 技术特点
-
-- 🔄 GraphRAG 架构：图数据库检索 + 向量语义检索 + 生成式 AI
-- 🎯 精准检索：基于 Neo4j 图数据库的结构化知识检索
-- 🔍 语义匹配：基于 ChromaDB + text2vec 中文向量模型的实体语义搜索
-- 🤖 智能生成：基于检索结果的上下文感知生成
-- ⚡ 实时响应：流式输出，即时反馈
-- 🛡️ 离线支持：知识图谱不可用时仍可提供服务
+- 实体类型：疾病(Disease)、症状(Symptom)、药品(Drug)、食物(Food)、检查(Check)、科室(Department)、药厂(Producer)
+- 关系类型：has_symptom、common_drug、recommand_drug、do_eat、no_eat、need_check、acompany_with、belongs_to、drugs_of
 
 ## 技术栈
 
 ### 后端
-- Python 3.x
-- Flask：Web 框架
-- Neo4j：图数据库
-- ChromaDB：向量数据库（实体语义索引）
-- sentence-transformers (shibing624/text2vec-base-chinese)：中文语义向量模型
-- DeepSeek API (langchain-openai)：生成模型
-- jieba：中文分词与关键词提取
-- python-dotenv：环境变量管理
+| 组件 | 用途 |
+|------|------|
+| Python 3.x | 开发语言 |
+| Flask + flask_cors | Web 服务框架 |
+| LangChain + langchain-openai | LLM 调用框架（ChatOpenAI 兼容 DeepSeek） |
+| DeepSeek API (deepseek-chat) | 生成模型 + 实体抽取 + 查询改写 + Cypher生成 |
+| Neo4j | 图数据库，存储医学知识图谱 |
+| ChromaDB | 向量数据库，实体语义索引 |
+| sentence-transformers (shibing624/text2vec-base-chinese) | 中文语义向量模型 |
+| python-dotenv | 环境变量管理 |
 
 ### 前端
-- React：UI 框架
-- Tailwind CSS：样式框架
-- Axios：HTTP 客户端
+| 组件 | 用途 |
+|------|------|
+| React 18 | UI 框架 |
+| Tailwind CSS | 样式框架 |
+| Axios | HTTP 客户端 |
+| Headless UI + Heroicons | UI 组件库 |
 
 ## 快速开始
 
 ### 1. 环境要求
 - Python 3.8+
 - Node.js 14+
-- Neo4j 数据库
+- Neo4j 数据库（本地 bolt://localhost:7687）
 - DeepSeek API 密钥
 
 ### 2. 安装步骤
@@ -88,24 +92,24 @@ cd GraphRAG
 2. 后端设置
 ```bash
 # 创建虚拟环境
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-venv\Scripts\activate     # Windows
+python -m venv .venv
+source .venv/bin/activate   # Linux/Mac
+.venv\Scripts\activate      # Windows
 
 # 安装依赖
 pip install -r requirements.txt
 
 # 配置环境变量
 cp .env.example .env
-# 编辑 .env 文件，填入你的配置
+# 编辑 .env 文件，填入 DEEPSEEK_API_KEY
 ```
 
 3. 构建知识图谱
 ```bash
-# 将医疗数据导入 Neo4j
+# 将医疗数据导入 Neo4j（需先准备好 data/medical.json）
 python build_medicalgraph.py
 
-# 构建实体向量索引（ChromaDB）
+# 构建实体向量索引（从 Neo4j 导出 → ChromaDB）
 python entity_indexer.py
 ```
 
@@ -118,56 +122,54 @@ npm install
 ### 3. 运行系统
 
 1. 启动 Neo4j 数据库
-
 2. 启动后端服务
 ```bash
-python graphrag_qa_system.py
+python graph_qa_system.py
 ```
-
 3. 启动前端服务
 ```bash
 cd frontend
 npm start
 ```
+4. 打开浏览器访问 http://localhost:3000
 
-4. 访问系统
-打开浏览器访问 http://localhost:3000
+也可以直接命令行使用（无需启动前端）：
+```bash
+python chat_deepseek_api.py
+```
 
 ## 项目结构
 
 ```
 GraphRAG/
-├── frontend/                  # React 前端
+├── chat_deepseek_api.py      # 核心模块：路由/意图/多跳/查询改写/流式问答
+├── graph_qa_system.py        # Flask Web 服务（API + 流式响应）
+├── build_medicalgraph.py     # Neo4j 知识图谱构建
+├── entity_indexer.py         # ChromaDB 实体向量索引构建
+├── question_parser.py        # 问题意图 → Cypher 转换器
+├── answer_search.py          # Neo4j 查询执行与答案组装
+├── frontend/                 # React 前端
 │   ├── src/
-│   │   ├── components/       # React 组件
-│   │   ├── App.js           # 主应用组件
-│   │   └── index.js         # 入口文件
-│   └── public/              # 静态资源
-├── chat_deepseek_api.py      # GraphRAG 核心处理模块（Neo4j + ChromaDB + DeepSeek）
-├── graphrag_qa_system.py     # Flask Web 服务（流式问答 API）
-├── build_medicalgraph.py     # 医疗知识图谱构建（导入 Neo4j）
-├── entity_indexer.py         # 实体向量索引构建（Neo4j → ChromaDB）
-├── answer_search.py          # Neo4j Cypher 查询与答案组装
-├── question_parser.py        # 问题解析与分类
-├── dict/                    # 医疗领域词典
-├── chroma_db/               # ChromaDB 向量数据库文件
-├── requirements.txt         # Python 依赖
-└── README.md               # 项目文档
+│   │   ├── components/       # React 组件（ChatInterface 等）
+│   │   ├── App.js
+│   │   └── index.js
+│   ├── public/
+│   ├── package.json
+│   └── tailwind.config.js
+├── dict/                     # 医疗领域词典（图谱构建用）
+├── prepare_data/             # 数据采集与预处理工具
+├── chroma_db/                # ChromaDB 向量数据库文件
+├── img/                      # 截图与文档图片
+├── requirements.txt          # Python 依赖
+├── .env.example              # 环境变量模板
+├── .gitignore
+├── LICENSE
+└── README.md
 ```
-
-## GraphRAG 工作流程
-
-1. 用户输入问题
-2. 系统解析问题意图，提取关键实体
-3. 从 Neo4j 知识图谱中精确检索实体关系
-4. 从 ChromaDB 向量库中语义匹配相关实体
-5. 将图检索 + 向量检索结果作为上下文提供给生成模型
-6. DeepSeek 结合上下文生成专业回答
-7. 流式返回生成的答案
 
 ## 问答示例
 
-系统支持多种类型的医疗问题，例如：
+系统支持多种类型的医疗问题：
 
 - 疾病症状查询：`乳腺癌的症状有哪些？`
 - 病因分析：`为什么有的人会失眠？`
@@ -175,7 +177,7 @@ GraphRAG/
 - 用药指导：`肝病要吃啥药？`
 - 检查项目：`脑膜炎怎么才能查出来？`
 
-每个问题都会得到基于知识图谱的专业回答，并通过流式响应实时展示。
+每个问题都会经过路由分析→多引擎检索→DeepSeek 生成，并通过流式响应实时展示。
 
 ## 使用指南
 
@@ -191,17 +193,6 @@ GraphRAG/
    - 一次只问一个问题
    - 对于紧急情况，请立即就医
 
-## 开发计划
-
-- [ ] 优化 GraphRAG 检索算法
-- [ ] 增加知识图谱规模
-- [ ] 改进生成模型提示工程
-- [ ] 添加多语言支持
-- [ ] 实现知识图谱可视化
-- [ ] 添加用户反馈机制
-
 ## 许可证
 
-本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
-
-Copyright (c) 2026 Jinyu
+MIT License · Copyright (c) 2026 Jinyu
